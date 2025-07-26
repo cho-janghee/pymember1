@@ -96,7 +96,8 @@ class MemberManager(QMainWindow):
         name = self.name_input.text().strip()
         email = self.email_input.text().strip()
         age = self.age_input.text().strip()
-        if not (name and email and age):
+        if no
+            .0t (name and email and age):
             QMessageBox.warning(self, "경고", "모든 정보를 입력하세요.")
             return
 
