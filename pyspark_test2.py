@@ -36,7 +36,7 @@ join_df = students_df.join(scores_df, students_df.id == scores_df.student_id, "i
 join_df.select("name", "subject", "score").show()
 
 # 파일 저장
-#join_df.write.mode("overwrite").parquet("output/join_result.parquet")
+join_df.write.mode("overwrite").parquet("output/join_result.parquet")
 join_df.write.mode("overwrite").csv("output/join_result.csv", header=True)
 print("저장 완료!")
 
