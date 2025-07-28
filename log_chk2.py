@@ -1,16 +1,15 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox
 import glob
 import os
 import re
 import chardet
-
+import sys
 
 def select_folder():
     root = tk.Tk()
     root.withdraw()
     return filedialog.askdirectory(title="분석할 폴더를 선택하세요")
-
 
 def is_text_file(filename):
     try:
@@ -29,7 +28,6 @@ def is_text_file(filename):
     _, ext = os.path.splitext(filename)
     return ext.lower() in text_exts
 
-
 def try_open_lines(filename):
     encodings = ['utf-8', 'euc-kr', 'cp949']
     for enc in encodings:
@@ -37,6 +35,8 @@ def try_open_lines(filename):
             with open(filename, encoding=enc) as f:
                 return list(f), enc
         except UnicodeDecodeError:
+            continue
+        except Exception:
             continue
     try:
         with open(filename, 'rb') as f:
@@ -53,16 +53,34 @@ def try_open_lines(filename):
         pass
     return None, None
 
-
 def scan_folder(folder, patterns):
     all_files = glob.glob(os.path.join(folder, "**", "*"), recursive=True)
-    file_list = [f for f in all_files if os.path.isfile(f) and is_text_file(f)]
+    file_list = [f for f in all_files if os.path.isfile(f)]
     detected_files = set()
     results = []
-    for filename in file_list:
+    scan_log = []  # (파일, 상태, 인코딩)
+    for idx, filename in enumerate(file_list, 1):
+        file_status = ""
+        encoding_used = None
+
+        # 1. 바이너리/비텍스트 파일 여부
+        if not is_text_file(filename):
+            file_status = "................."
+            sys.stdout.write(f"\r[{idx}/{len(file_list)}] {filename}  ... {file_status}                     \n")
+            sys.stdout.flush()
+            scan_log.append((filename, file_status, None))
+            continue
+
+        # 2. 텍스트 파일이라면, 인코딩 탐색
         lines, encoding_used = try_open_lines(filename)
         if lines is None:
+            file_status = "................"
+            sys.stdout.write(f"\r[{idx}/{len(file_list)}] {filename}  ... {file_status}                     \n")
+            sys.stdout.flush()
+            scan_log.append((filename, file_status, None))
             continue
+
+        # 3. 패턴 검색
         file_flag = False
         for lineno, line in enumerate(lines, 1):
             for name, pattern in patterns.items():
@@ -78,9 +96,15 @@ def scan_folder(folder, patterns):
                     })
                     file_flag = True
         if file_flag:
+            file_status = "검사완료 (패턴검출)"
             detected_files.add(filename)
-    return detected_files, results
+        else:
+            file_status = "검사완료 (패턴없음)"
+        sys.stdout.write(f"\r[{idx}/{len(file_list)}] {filename}  ... {file_status}                     \n")
+        sys.stdout.flush()
+        scan_log.append((filename, file_status, encoding_used))
 
+    return detected_files, results, scan_log
 
 def prompt_masking():
     root = tk.Tk()
@@ -89,9 +113,7 @@ def prompt_masking():
     root.destroy()
     return result
 
-
 def mask_files(results, patterns):
-    # 파일별로 묶기
     from collections import defaultdict
     file_matches = defaultdict(list)
     for res in results:
@@ -99,27 +121,21 @@ def mask_files(results, patterns):
     masked_file_list = []
 
     for filename, matches in file_matches.items():
-        # 한 파일 내 여러줄, 여러 패턴이 있을 수 있으니 전부 마스킹
         lines, encoding_used = try_open_lines(filename)
         if lines is None:
-            continue  # 예외 방지
+            continue
 
-        # 마스킹할 라인/패턴 정보로 변환
-        # {라인번호: [(패턴, 치환값), ...]} 식으로 구성
         line_map = defaultdict(list)
         for match in matches:
             line_map[match['line'] - 1].append(match['pattern'])
 
-        # 라인별 마스킹
         new_lines = []
         for idx, line in enumerate(lines):
-            # 이 줄에 마스킹할 패턴이 있으면 반복해서 Null 치환
             if idx in line_map:
                 for pattern in line_map[idx]:
                     line = pattern.sub("", line)
             new_lines.append(line)
 
-        # 저장
         dir_name = os.path.dirname(filename)
         base_name = os.path.basename(filename)
         masked_name = os.path.join(dir_name, "masked_" + base_name)
@@ -128,7 +144,6 @@ def mask_files(results, patterns):
         masked_file_list.append((base_name, "masked_" + base_name))
     return masked_file_list
 
-
 if __name__ == "__main__":
     patterns = {
         "IP주소": re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b'),
@@ -136,8 +151,14 @@ if __name__ == "__main__":
     }
     folder = select_folder()
     if folder:
-        print(f"선택한 폴더: {folder}")
-        detected_files, results = scan_folder(folder, patterns)
+        print(f"선택한 폴더: {folder}\n")
+        detected_files, results, scan_log = scan_folder(folder, patterns)
+
+        print("\n--- 전체 검사 결과 요약 ---")
+        for i, (filename, status, enc) in enumerate(scan_log, 1):
+            enc_info = f"[{enc}]" if enc else ""
+            print(f"{i:4d}. {filename}   ... {status} {enc_info}")
+
         if results:
             print(f"\n=== 시스템 정보 검출된 파일: {len(detected_files)}개 ===")
             for i, f in enumerate(sorted(detected_files), 1):
@@ -147,7 +168,6 @@ if __name__ == "__main__":
                 print(f"[{result['file']}:{result['line']}줄][{result['encoding']}]"
                       f"[{result['type']}] {result['content']}: {result['full_line']}")
 
-            # --- 치환 확인 프롬프트
             if prompt_masking():
                 masked_files = mask_files(results, patterns)
                 print("\n=== 치환(마스킹)된 파일 리스트 ===")
