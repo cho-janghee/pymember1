@@ -4,7 +4,7 @@ import pandas as pd
 import os
 import pyperclip
 
-# 파일 선택 다이얼로그
+# 파일 선택 다이얼로그(ITSM에서 받은 파일)
 def select_ci_file():
     root = tk.Tk()
     root.withdraw()
@@ -54,7 +54,7 @@ def find_all_paths(tree, node_info, start, path, ci_id, result):
 def make_ci_path(df, ci_id):
     df.columns = [c.strip() for c in df.columns]
 
-    # 컬럼 자동 매핑
+    # 컬럼 자동 매핑(ITSM에서 받은 파일)
     colmap = {}
     for col in df.columns:
         if '상위 CI ID' in col: colmap['parent_id'] = col
@@ -83,13 +83,13 @@ def make_ci_path(df, ci_id):
     if not roots:
         roots = list(parents)  # 예외 상황 시
 
-    # 모든 root에서 DFS, ci_id 포함한 path만
+    # 모든 root에서 Depth First Search 알고리즘, ci_id 포함한 path만
     result_paths = []
     for root in roots:
         find_all_paths(tree, node_info, root, [], ci_id, result_paths)
 
     if not result_paths:
-        raise Exception(f"'{ci_id}'를 포함한 경로를 찾을 수 없습니다.")
+        raise Exception(f"'{ci_id}'가 존재하지 않습니다.")
 
     # 여러 경로가 나올 수도 있으니 모두 출력 (여러개면 줄바꿈)
     result_strs = []
@@ -129,7 +129,7 @@ def main():
         return
 
     win = tk.Tk()
-    win.title("CI 경로 출력 및 복사")
+    win.title("CI 상하위 관계 정보")
     win.geometry("900x350")
 
     text_box = scrolledtext.ScrolledText(win, width=120, height=8, font=("맑은 고딕", 11))
