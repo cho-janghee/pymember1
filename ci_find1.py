@@ -30,7 +30,7 @@ def read_file_with_encoding(filepath):
                 return df, enc
             except Exception:
                 continue
-        raise UnicodeDecodeError("모든 인코딩 시도 실패! 수동으로 확인 필요.")
+        raise UnicodeDecodeError("파일 열기 실패. 확인 필요.")
 
 # CI ID 입력 다이얼로그
 def input_ci_id():
