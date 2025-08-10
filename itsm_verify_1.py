@@ -8,8 +8,9 @@ def check_incident(df):
     today = datetime.now().date()
     result = df.copy()
 
-    cols = ['인시던트ID','접수구분','제목','업무구분','대분류','중분류','구성항목','내외부요인',
-            '장애등급','영향범위','장애발생일시','서비스복구일시','장애복구일시','처리상태','지연사유']
+    cols = ('업무구분','ID','제목','우선순위','파트명','장애요인','상태','처리구분',
+            '접수구분','장애유형분류 Level 1','장애유형분류 Level 2','서비스 영향',
+            '구성항목명','서비스 영향범위', '장애발생일시', '서비스 복구일시', '장애복구일시', '취소 및 지연사유')
     for c in cols:
         if c not in result.columns:
             raise Exception(f'필수컬럼 누락: {c}')
@@ -21,11 +22,11 @@ def check_incident(df):
             return pd.NaT
 
     result['장애발생일시_dt'] = result['장애발생일시'].apply(to_dt)
-    result['서비스복구일시_dt'] = result['서비스복구일시'].apply(to_dt)
+    result['서비스 복구일시_dt'] = result['서비스 복구일시'].apply(to_dt)
     result['장애복구일시_dt'] = result['장애복구일시'].apply(to_dt)
 
     def i1(row):
-        if str(row['처리상태']).strip() == "처리" and pd.notnull(row['장애발생일시_dt']):
+        if str(row['처리구분']).strip() == "처리 완료" and pd.notnull(row['장애발생일시_dt']):
             if (today - row['장애발생일시_dt'].date()).days > 20:
                 return "초과"
         return ""
@@ -42,15 +43,15 @@ def check_incident(df):
     }
     def i2(row):
         gubun = str(row['접수구분']).strip()
-        major = str(row['대분류']).strip()
+        major = str(row['장애유형분류 Level 1']).strip()
         if gubun in valid_major and major not in valid_major[gubun]:
             return "확인"
         return ""
 
-    def i3(row):
-        grade = str(row['장애등급']).strip()
+    def i4(row):
+        grade = str(row['우선순위']).strip()
         start = row['장애발생일시_dt']
-        svc   = row['서비스복구일시_dt']
+        svc   = row['서비스 복구일시_dt']
         end   = row['장애복구일시_dt']
         if grade == "2등급":
             if pd.isnull(start) or pd.isnull(svc) or pd.isnull(end): return "확인"
@@ -60,22 +61,21 @@ def check_incident(df):
             if not (start == svc and svc < end): return "확인"
         return ""
 
-    def i4(row):
-        grade = str(row['장애등급']).strip()
-        impact = row['영향범위']
+    def i5(row):
+        grade = str(row['우선순위']).strip()
+        impact = row['서비스 영향범위']
         if grade in ["1등급", "2등급"]:
             if pd.isnull(impact) or str(impact).strip() == "":
                 return "확인"
         return ""
 
-    def i5(row):
-        inout = str(row['내외부요인']).strip()
-        grade = str(row['장애등급']).strip()
+    def i6(row):
+        inout = str(row['장애요인']).strip()
+        grade = str(row['우선순위']).strip()
         start = row['장애발생일시_dt']
         end = row['장애복구일시_dt']
         gubun = str(row['접수구분']).strip()
-        reason = row['지연사유']
-        incid = str(row['인시던트ID']).strip()
+        reason = row['취소 및 지연사유']
         if inout == "내부요인" and grade in ["1등급", "2등급", "3등급"]:
             if pd.isnull(start) or pd.isnull(end): return "확인"
             elapsed = (end - start).total_seconds() / 60
@@ -92,10 +92,14 @@ def check_incident(df):
 
     result["I1 인시던트 처리상태"] = result.apply(i1, axis=1)
     result["I2 접수구분 정확성"] = result.apply(i2, axis=1)
-    result["I3 장애복구시간의 정확성"] = result.apply(i3, axis=1)
-    result["I4 구성항목 적합성"] = result.apply(i4, axis=1)
-    result["I5 지연사유"] = result.apply(i5, axis=1)
-    result.drop(['장애발생일시_dt','서비스복구일시_dt','장애복구일시_dt'], axis=1, inplace=True)
+    result["I4 장애복구시간의 정확성"] = result.apply(i4, axis=1)
+    result["I5 구성항목명 적합성"] = result.apply(i5, axis=1)
+    result["I6 취소 및 지연사유"] = result.apply(i6, axis=1)
+    result.drop(['장애발생일시_dt','서비스 복구일시_dt','장애복구일시_dt'], axis=1, inplace=True)
+
+    pd.set_option('display.max_columns', None)
+    #print(result.to_string())
+
     return result
 
 def select_file():
@@ -138,14 +142,14 @@ def run_check():
 root = tk.Tk()
 root.title("엑셀 업무자동화 검사도구")
 root.resizable(False, False)
-mainfrm = tk.Frame(root, padx=30, pady=25)
-mainfrm.pack()
+mainframe = tk.Frame(root, padx=30, pady=25)
+mainframe.pack()
 
-tk.Label(mainfrm, text="검사할 기준을 선택하세요", font=("맑은 고딕", 14, "bold")).pack(pady=(0, 15))
+tk.Label(mainframe, text="검사할 기준을 선택하세요", font=("맑은 고딕", 14, "bold")).pack(pady=(0, 15))
 check_var = tk.StringVar(value="")  # 초기값 ""로 설정하면 비선택상태
-tk.Radiobutton(mainfrm, text="인시던트",   variable=check_var, value="incident", font=("맑은 고딕",12)).pack(anchor="w")
-tk.Radiobutton(mainfrm, text="구성",       variable=check_var, value="config",   font=("맑은 고딕",12)).pack(anchor="w")
-tk.Radiobutton(mainfrm, text="변경릴리즈", variable=check_var, value="change",   font=("맑은 고딕",12)).pack(anchor="w")
-tk.Button(mainfrm, text="엑셀 파일 선택 및 검사", command=run_check, width=24, height=2, font=("맑은 고딕",11)).pack(pady=(25,0))
+tk.Radiobutton(mainframe, text="인시던트", variable=check_var, value="incident", font=("맑은 고딕", 12)).pack(anchor="w")
+tk.Radiobutton(mainframe, text="구성", variable=check_var, value="config", font=("맑은 고딕", 12)).pack(anchor="w")
+tk.Radiobutton(mainframe, text="변경릴리즈", variable=check_var, value="change", font=("맑은 고딕", 12)).pack(anchor="w")
+tk.Button(mainframe, text="엑셀 파일 선택 및 검사", command=run_check, width=24, height=2, font=("맑은 고딕", 11)).pack(pady=(25, 0))
 
 root.mainloop()
